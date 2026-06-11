@@ -19,12 +19,17 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "ruff (>=0.15.16,<0.16.0)",
-    "pyrefly (>=1.0.0,<2.0.0)"
+    "pyrefly (>=1.0.0,<2.0.0)",
+    "django-stubs (>=6.0.5,<7.0.0)",
+    "pytest (>=9.0.3,<10.0.0)",
+    "pytest-django (>=4.12.0,<5.0.0)",
+    "black (>=26.5.1,<27.0.0)",
+    "isort (>=8.0.1,<9.0.0)"
 ]
 
 [tool.ruff]
 line-length = 120
-ignore-init-module-imports = true
+extend-exclude = ["**/migrations/**"]
 
 [tool.ruff.format]
 preview = true
@@ -88,9 +93,29 @@ select = [
 
 ignore= ["S101", "COM812"]
 
+[tool.ruff.lint.per-file-ignores]
+"**/settings.py" = ["S105"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.mccabe]
 # Flag errors (`C901`) whenever the complexity level exceeds 5.
 max-complexity = 5
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+
+[tool.pyrefly]
+project-includes = ["**/*.py*", "**/*.ipynb"]
+project-excludes = [
+    "**/migrations/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/static/**",
+    "**/media/**",
+]
+python-version = "3.14"
