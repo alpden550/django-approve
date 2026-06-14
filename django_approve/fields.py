@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Any
 
 from django.db import models
@@ -45,7 +46,7 @@ def get_approvable_fields(model: type[models.Model]) -> list[str]:
         model: A registered model.
 
     Returns:
-        Candidate fields narrowed to the registry whitelist, or all candidates
+        Candidate fields are narrowed to the registry whitelist, or all candidates
         when the whitelist is "__all__".
     """
     candidates = get_candidate_fields(model)
@@ -55,3 +56,18 @@ def get_approvable_fields(model: type[models.Model]) -> list[str]:
         return candidates
 
     return [name for name in candidates if name in whitelist]
+
+
+def prune_tracked_fields(model: type[models.Model], tracked_fields: Iterable[str]) -> list[str]:
+    """Drop tracked field names that are no longer approvable for the model.
+
+    Args:
+        model: A registered model.
+        tracked_fields: Previously stored/selected field names.
+
+    Returns:
+        The given names filtered down to the model's current approvable fields,
+        preserving their original order.
+    """
+    valid = set(get_approvable_fields(model))
+    return [name for name in tracked_fields if name in valid]
