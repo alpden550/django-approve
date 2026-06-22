@@ -11,3 +11,9 @@ class ApprovalConfigAdmin(admin.ModelAdmin):
     list_filter = ("is_enabled",)
     list_select_related = ("content_type",)
     readonly_fields = ("content_type",)
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        return False
