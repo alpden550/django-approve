@@ -1,0 +1,34 @@
+{% extends "admin/change_form.html" %}
+
+{% block content %}
+  {% if approval_pending %}
+    <div class="module" style="margin-bottom:16px; border:1px solid #f0c36d; background:#fcf8e3; padding:10px 14px;">
+      <h2 style="margin-top:0;">Pending approval</h2>
+      <table style="width:100%;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Field</th>
+            <th style="text-align:left;">Current → Requested</th>
+            <th style="text-align:left;">Status</th>
+            <th style="text-align:left;">Requested by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cr in approval_pending %}
+            <tr>
+              <td>{{ cr.field_name }}</td>
+              <td>
+                <span style="color:#999;">{{ cr.old_value|default:"—" }}</span>
+                &nbsp;→&nbsp;
+                <strong>{{ cr.new_value|default:"—" }}</strong>
+              </td>
+              <td>{{ cr.get_status_display }}</td>
+              <td>{{ cr.requested_by|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
