@@ -6,3 +6,7 @@ class ApproveError(Exception):
 
 class AlreadyRegisteredError(ApproveError):
     """Raised when a model is registered for the approval workflow more than once."""
+
+
+class ConflictError(ApproveError):
+    """Target's current value no longer matches the request's old_value."""
