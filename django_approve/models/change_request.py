@@ -16,8 +16,8 @@ class ChangeRequestField(models.Model):
     target = GenericForeignKey("content_type", "object_id")
     field_name = models.CharField(max_length=255)
     change_type = models.CharField(max_length=10, choices=ChangeTypeChoices.choices)
-    old_value = models.TextField(null=True)
-    new_value = models.TextField(null=True)
+    old_value = models.JSONField(null=True)
+    new_value = models.JSONField(null=True)
     status = models.CharField(
         max_length=10,
         choices=ApprovalStatusChoices.choices,
