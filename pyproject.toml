@@ -1,16 +1,34 @@
 [project]
 name = "django-approve"
 version = "0.1.0"
-description = ""
+description = "Moderated (four-eyes maker-checker) approval workflow for editing model fields through the Django admin"
 authors = [
     {name = "Denis Novikov",email = "alpden550@gmail.com"}
 ]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13"
+keywords = ["django", "admin", "approval", "maker-checker", "four-eyes", "workflow", "moderator"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "django (>=5)"
 ]
 
+[project.urls]
+Homepage = "https://github.com/alpden550/django-approve"
+Repository = "https://github.com/alpden550/django-approve"
+Issues = "https://github.com/alpden550/django-approve/issues"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

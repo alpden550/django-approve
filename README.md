@@ -1,7 +1,7 @@
 # django-approve
 
-Maker-checker (four-eyes) approval workflow for editing individual model fields
-through the Django admin. An edit to a tracked field is not written immediately —
+Moderated (four-eyes maker-checker) approval workflow for editing model fields through the Django admin.
+An edit to a tracked field is not written immediately —
 it is diverted into a `ChangeRequestField` row, the field is locked (read-only)
 while the request is pending, and a reviewer approves or rejects it.
 
