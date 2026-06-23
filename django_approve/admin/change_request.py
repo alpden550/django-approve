@@ -6,6 +6,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from django_approve.admin.filters import TargetModelFilter
+from django_approve.config import conf
 from django_approve.cons import ApprovalStatusChoices
 from django_approve.exceptions import ConflictError, SelfApprovalError
 from django_approve.models.change_request import ChangeRequestField
@@ -45,6 +46,43 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:
         return False
+
+    @staticmethod
+    def _allowed_statuses(obj: ChangeRequestField, user: AbstractBaseUser) -> list[tuple[str, str]]:
+        """Status choices selectable in the form for the given user.
+
+        `deleted` is system-only (set on target deletion) and never offered.
+        `rejected` is the reviewer's verb and is always hidden from the request's
+        author, whose withdrawal verb is `cancelled`; `approved` is hidden from the
+        author only while four-eyes is on. `cancelled` is the author's only and is
+        hidden from reviewers. The request's current status is always kept so
+        terminal rows render.
+        """
+        excluded = {ApprovalStatusChoices.DELETED.value}
+        is_author = obj.requested_by_id == user.pk  # pyrefly: ignore [missing-attribute]
+        if is_author:
+            excluded.add(ApprovalStatusChoices.REJECTED.value)
+            if conf.REQUIRE_DIFFERENT_USER:
+                excluded.add(ApprovalStatusChoices.APPROVED.value)
+        else:
+            excluded.add(ApprovalStatusChoices.CANCELLED.value)
+        excluded.discard(obj.status)
+
+        return [choice for choice in ApprovalStatusChoices.choices if choice[0] not in excluded]
+
+    def get_form(self, request, obj=None, change=False, **kwargs):  # noqa: FBT002
+        form_class = super().get_form(request, obj, change=change, **kwargs)
+        if obj is None:
+            return form_class
+
+        allowed = self._allowed_statuses(obj, request.user)
+
+        class RestrictedStatusForm(form_class):
+            def __init__(self, *args, **inner_kwargs):
+                super().__init__(*args, **inner_kwargs)
+                self.fields["status"].choices = allowed  # pyrefly: ignore [missing-attribute]
+
+        return RestrictedStatusForm
 
     def save_model(self, request, obj, form, change) -> None:
         if "status" not in form.changed_data:
