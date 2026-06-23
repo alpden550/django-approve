@@ -10,3 +10,7 @@ class AlreadyRegisteredError(ApproveError):
 
 class ConflictError(ApproveError):
     """Target's current value no longer matches the request's old_value."""
+
+
+class SelfApprovalError(ApproveError):
+    """Reviewer is the same user who requested the change (four-eyes violation)."""

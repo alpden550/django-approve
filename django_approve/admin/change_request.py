@@ -1,10 +1,13 @@
+from collections import Counter
+
 from django.contrib import admin, messages
+from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from django_approve.admin.filters import TargetModelFilter
 from django_approve.cons import ApprovalStatusChoices
-from django_approve.exceptions import ConflictError
+from django_approve.exceptions import ConflictError, SelfApprovalError
 from django_approve.models.change_request import ChangeRequestField
 from django_approve.services import apply_field
 
@@ -44,35 +47,44 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         return False
 
     def save_model(self, request, obj, form, change) -> None:
-        if "status" in form.changed_data:
-            obj.approved_by = request.user
+        if "status" not in form.changed_data:
+            super().save_model(request, obj, form, change)
+            return
+
+        obj.approved_by = request.user
+        if obj.status == ApprovalStatusChoices.APPROVED:
+            try:
+                apply_field(change_request=obj, reviewer=request.user)  # pyrefly: ignore [bad-argument-type]
+            except (ConflictError, SelfApprovalError) as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return
         super().save_model(request, obj, form, change)
 
-        status_changed = "status" in form.changed_data
-        if status_changed and obj.status == ApprovalStatusChoices.APPROVED:
-            try:
-                apply_field(change_request=obj)
-            except ConflictError as exc:
-                self.message_user(request, str(exc), level=messages.ERROR)
+    @staticmethod
+    def _apply_one(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> str:
+        try:
+            apply_field(change_request=change_request, reviewer=reviewer)
+        except ConflictError:
+            return "conflict"
+        except SelfApprovalError:
+            return "blocked"
+
+        change_request.status = ApprovalStatusChoices.APPROVED
+        change_request.approved_by = reviewer  # pyrefly: ignore [bad-assignment]
+        change_request.save(update_fields=["status", "approved_by", "updated"])
+        return "applied"
 
     @admin.action(description="Approve selected change requests")
     def approve(self, request: HttpRequest, queryset: QuerySet[ChangeRequestField]) -> None:
-        applied, conflicts = 0, 0
-        for change_request in queryset.filter(status=ApprovalStatusChoices.PENDING):
-            try:
-                apply_field(change_request=change_request)
-            except ConflictError:
-                conflicts += 1
-                continue
-
-            change_request.status = ApprovalStatusChoices.APPROVED
-            change_request.approved_by = request.user  # pyrefly: ignore [bad-assignment]
-            change_request.save(update_fields=["status", "approved_by", "updated"])
-            applied += 1
-
-        msg = f"Approved & applied: {applied}"
-        if conflicts:
-            msg += f"; skipped (conflict): {conflicts}"
+        outcomes = Counter(
+            self._apply_one(change_request, request.user)  # pyrefly: ignore [bad-argument-type]
+            for change_request in queryset.filter(status=ApprovalStatusChoices.PENDING)
+        )
+        msg = f"Approved & applied: {outcomes['applied']}"
+        if outcomes["conflict"]:
+            msg += f"; skipped (conflict): {outcomes['conflict']}"
+        if outcomes["blocked"]:
+            msg += f"; skipped (self-approval): {outcomes['blocked']}"
         self.message_user(request, msg)
 
     @admin.action(description="Reject selected change requests")

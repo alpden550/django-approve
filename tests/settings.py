@@ -1,6 +1,10 @@
+import tempfile
+
 SECRET_KEY = "test-only-not-secret"
 
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+
+MEDIA_ROOT = tempfile.mkdtemp(prefix="django-approve-test-media-")
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",

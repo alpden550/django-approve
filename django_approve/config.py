@@ -16,5 +16,9 @@ class AppSettings:
     def GROUP_NAME(self) -> str:  # noqa: N802
         return _get("GROUP_NAME", default="Approvals")
 
+    @property
+    def REQUIRE_DIFFERENT_USER(self) -> bool:  # noqa: N802
+        return _get("REQUIRE_DIFFERENT_USER", default=True)
+
 
 conf = AppSettings()
