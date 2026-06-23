@@ -7,7 +7,7 @@ from django_approve.registry import ApprovalRegistry
 from tests.models import Sample
 
 EXPECTED_CANDIDATES = ["name", "amount", "owner", "event_date", "price"]
-FIELD_NAME_POOL = [*EXPECTED_CANDIDATES, "bogus", "missing", "ghost"]
+FIELD_NAME_POOL = [*EXPECTED_CANDIDATES, "invalid", "missing", "unknown"]
 
 
 def test_candidate_fields_are_concrete_editable_supported():
