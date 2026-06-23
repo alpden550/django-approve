@@ -29,34 +29,6 @@ class _FakeForm:
         self.cleaned_data = cleaned_data
 
 
-@pytest.fixture
-def change_admin():
-    return ChangeRequestFieldAdmin(ChangeRequestField, AdminSite())
-
-
-@pytest.fixture
-def sample_admin():
-    return SampleAdmin(Sample, AdminSite())
-
-
-@pytest.fixture
-def tracked_amount(db, monkeypatch):
-    reg = ApprovalRegistry()
-    reg.register(Sample)
-    monkeypatch.setattr("django_approve.fields.registry", reg)
-    return mixer.blend(
-        ApprovalConfig,
-        content_type=ContentType.objects.get_for_model(Sample),
-        tracked_fields=["amount"],
-        is_enabled=True,
-    )
-
-
-@pytest.fixture
-def maker(db):
-    return mixer.blend("auth.User")
-
-
 def _request_by(requester):
     sample = mixer.blend(Sample)
     return mixer.blend(
@@ -86,86 +58,113 @@ def _request_as(user):
     return request
 
 
-def test_author_sees_only_pending_and_cancelled(change_admin, maker):
-    change_request = _request_by(maker)
+@pytest.mark.django_db
+class TestChangeRequestFieldAdminStatusChoices:
+    @pytest.fixture
+    def change_admin(self):
+        return ChangeRequestFieldAdmin(ChangeRequestField, AdminSite())
 
-    choices = _status_choices(change_admin, _request_as(maker), change_request)
+    @pytest.fixture
+    def maker(self):
+        return mixer.blend("auth.User")
 
-    assert choices == {S.PENDING, S.CANCELLED}
+    def test_author_sees_only_pending_and_cancelled(self, change_admin, maker):
+        change_request = _request_by(maker)
 
+        choices = _status_choices(change_admin, _request_as(maker), change_request)
 
-def test_reviewer_sees_pending_approved_rejected(change_admin, maker):
-    change_request = _request_by(maker)
-    checker = mixer.blend("auth.User")
+        assert choices == {S.PENDING, S.CANCELLED}
 
-    choices = _status_choices(change_admin, _request_as(checker), change_request)
+    def test_reviewer_sees_pending_approved_rejected(self, change_admin, maker):
+        change_request = _request_by(maker)
+        checker = mixer.blend("auth.User")
 
-    assert choices == {S.PENDING, S.APPROVED, S.REJECTED}
+        choices = _status_choices(change_admin, _request_as(checker), change_request)
 
+        assert choices == {S.PENDING, S.APPROVED, S.REJECTED}
 
-def test_deleted_is_never_offered(change_admin, maker):
-    change_request = _request_by(maker)
-    checker = mixer.blend("auth.User")
+    def test_deleted_is_never_offered(self, change_admin, maker):
+        change_request = _request_by(maker)
+        checker = mixer.blend("auth.User")
 
-    author_choices = _status_choices(change_admin, _request_as(maker), change_request)
-    reviewer_choices = _status_choices(change_admin, _request_as(checker), change_request)
+        author_choices = _status_choices(change_admin, _request_as(maker), change_request)
+        reviewer_choices = _status_choices(change_admin, _request_as(checker), change_request)
 
-    assert S.DELETED not in author_choices
-    assert S.DELETED not in reviewer_choices
+        assert S.DELETED not in author_choices
+        assert S.DELETED not in reviewer_choices
 
+    @override_settings(APPROVE_REQUIRE_DIFFERENT_USER=False)
+    def test_author_can_self_approve_when_four_eyes_disabled(self, change_admin, maker):
+        change_request = _request_by(maker)
 
-@override_settings(APPROVE_REQUIRE_DIFFERENT_USER=False)
-def test_author_can_self_approve_when_four_eyes_disabled(change_admin, maker):
-    change_request = _request_by(maker)
-
-    choices = _status_choices(change_admin, _request_as(maker), change_request)
-    assert choices == {S.PENDING, S.APPROVED, S.CANCELLED}
-
-
-def test_save_model_creates_pending_request_and_reverts_tracked_field(sample_admin, tracked_amount, maker):
-    sample = mixer.blend(Sample, amount=OLD_AMOUNT)
-    form = _FakeForm(changed_data=["amount"], cleaned_data={"amount": NEW_AMOUNT})
-    sample.amount = NEW_AMOUNT
-
-    sample_admin.save_model(_request_as(maker), sample, form, change=True)
-
-    change_request = ChangeRequestField.objects.get(
-        content_type=ContentType.objects.get_for_model(Sample), object_id=sample.pk
-    )
-    assert change_request.field_name == "amount"
-    assert change_request.old_value == OLD_AMOUNT
-    assert change_request.new_value == NEW_AMOUNT
-    assert change_request.status == S.PENDING
-    assert change_request.requested_by == maker
-    assert sample.amount == OLD_AMOUNT
+        choices = _status_choices(change_admin, _request_as(maker), change_request)
+        assert choices == {S.PENDING, S.APPROVED, S.CANCELLED}
 
 
-def test_save_model_skips_untracked_field(sample_admin, maker, db):
-    sample = mixer.blend(Sample, name="old")
-    form = _FakeForm(changed_data=["name"], cleaned_data={"name": "new"})
-    sample.name = "new"
+@pytest.mark.django_db
+class TestApprovalAdminMixinSaveModel:
+    @pytest.fixture
+    def sample_admin(self):
+        return SampleAdmin(Sample, AdminSite())
 
-    sample_admin.save_model(_request_as(maker), sample, form, change=True)
+    @pytest.fixture
+    def tracked_amount(self, monkeypatch):
+        reg = ApprovalRegistry()
+        reg.register(Sample)
+        monkeypatch.setattr("django_approve.fields.registry", reg)
+        return mixer.blend(
+            ApprovalConfig,
+            content_type=ContentType.objects.get_for_model(Sample),
+            tracked_fields=["amount"],
+            is_enabled=True,
+        )
 
-    assert not ChangeRequestField.objects.exists()
-    sample.refresh_from_db()
-    assert sample.name == "new"
+    @pytest.fixture
+    def maker(self):
+        return mixer.blend("auth.User")
 
+    def test_save_model_creates_pending_request_and_reverts_tracked_field(self, sample_admin, tracked_amount, maker):
+        sample = mixer.blend(Sample, amount=OLD_AMOUNT)
+        form = _FakeForm(changed_data=["amount"], cleaned_data={"amount": NEW_AMOUNT})
+        sample.amount = NEW_AMOUNT
 
-def test_get_readonly_fields_locks_pending_field(sample_admin, maker):
-    sample = mixer.blend(Sample, amount=OLD_AMOUNT)
-    mixer.blend(
-        ChangeRequestField,
-        content_type=ContentType.objects.get_for_model(Sample),
-        object_id=sample.pk,
-        field_name="amount",
-        change_type=ChangeTypeChoices.UPDATE,
-        old_value=OLD_AMOUNT,
-        new_value=NEW_AMOUNT,
-        status=S.PENDING,
-        requested_by=maker,
-    )
+        sample_admin.save_model(_request_as(maker), sample, form, change=True)
 
-    readonly = sample_admin.get_readonly_fields(_request_as(maker), sample)
+        change_request = ChangeRequestField.objects.get(
+            content_type=ContentType.objects.get_for_model(Sample), object_id=sample.pk
+        )
+        assert change_request.field_name == "amount"
+        assert change_request.old_value == OLD_AMOUNT
+        assert change_request.new_value == NEW_AMOUNT
+        assert change_request.status == S.PENDING
+        assert change_request.requested_by == maker
+        assert sample.amount == OLD_AMOUNT
 
-    assert "amount" in readonly
+    def test_save_model_skips_untracked_field(self, sample_admin, maker):
+        sample = mixer.blend(Sample, name="old")
+        form = _FakeForm(changed_data=["name"], cleaned_data={"name": "new"})
+        sample.name = "new"
+
+        sample_admin.save_model(_request_as(maker), sample, form, change=True)
+
+        assert not ChangeRequestField.objects.exists()
+        sample.refresh_from_db()
+        assert sample.name == "new"
+
+    def test_get_readonly_fields_locks_pending_field(self, sample_admin, maker):
+        sample = mixer.blend(Sample, amount=OLD_AMOUNT)
+        mixer.blend(
+            ChangeRequestField,
+            content_type=ContentType.objects.get_for_model(Sample),
+            object_id=sample.pk,
+            field_name="amount",
+            change_type=ChangeTypeChoices.UPDATE,
+            old_value=OLD_AMOUNT,
+            new_value=NEW_AMOUNT,
+            status=S.PENDING,
+            requested_by=maker,
+        )
+
+        readonly = sample_admin.get_readonly_fields(_request_as(maker), sample)
+
+        assert "amount" in readonly

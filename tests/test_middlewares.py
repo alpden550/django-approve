@@ -20,8 +20,8 @@ def _request_to(path, user):
     return request
 
 
-def _approver():
-    approver = mixer.blend("auth.User", is_active=True)
+def _approver(*, is_active=True):
+    approver = mixer.blend("auth.User", is_active=is_active)
     group, _ = Group.objects.get_or_create(name=conf.GROUP_NAME)
     approver.groups.add(group)
     return approver
@@ -41,59 +41,54 @@ def _pending_request():
     )
 
 
-@pytest.fixture
-def middleware():
-    return PendingApprovalsNoticeMiddleware(get_response=lambda request: "response")
+@pytest.mark.django_db
+class TestPendingApprovalsNoticeMiddleware:
+    @pytest.fixture
+    def middleware(self):
+        return PendingApprovalsNoticeMiddleware(get_response=lambda request: "response")
 
+    def test_notifies_approver_of_pending_requests_on_admin_index(self, middleware):
+        approver = _approver()
+        _pending_request()
+        request = _request_to("/admin/", approver)
 
-def test_notifies_approver_of_pending_requests_on_admin_index(db, middleware):
-    approver = _approver()
-    _pending_request()
-    request = _request_to("/admin/", approver)
+        middleware(request)
 
-    middleware(request)
+        messages = list(request._messages)
+        assert len(messages) == 1
+        assert "1 change request" in str(messages[0])
 
-    messages = list(request._messages)
-    assert len(messages) == 1
-    assert "1 change request" in str(messages[0])
+    def test_no_notice_without_pending_requests(self, middleware):
+        approver = _approver()
+        request = _request_to("/admin/", approver)
 
+        middleware(request)
 
-def test_no_notice_without_pending_requests(db, middleware):
-    approver = _approver()
-    request = _request_to("/admin/", approver)
+        assert not list(request._messages)
 
-    middleware(request)
+    def test_no_notice_for_non_approver(self, middleware):
+        user = mixer.blend("auth.User", is_active=True)
+        _pending_request()
+        request = _request_to("/admin/", user)
 
-    assert not list(request._messages)
+        middleware(request)
 
+        assert not list(request._messages)
 
-def test_no_notice_for_non_approver(db, middleware):
-    user = mixer.blend("auth.User", is_active=True)
-    _pending_request()
-    request = _request_to("/admin/", user)
+    def test_no_notice_outside_admin_index(self, middleware):
+        approver = _approver()
+        _pending_request()
+        request = _request_to("/admin/login/", approver)
 
-    middleware(request)
+        middleware(request)
 
-    assert not list(request._messages)
+        assert not list(request._messages)
 
+    def test_no_notice_for_inactive_approver(self, middleware):
+        approver = _approver(is_active=False)
+        _pending_request()
+        request = _request_to("/admin/", approver)
 
-def test_no_notice_outside_admin_index(db, middleware):
-    approver = _approver()
-    _pending_request()
-    request = _request_to("/admin/login/", approver)
+        middleware(request)
 
-    middleware(request)
-
-    assert not list(request._messages)
-
-
-def test_no_notice_for_inactive_approver(db, middleware):
-    approver = mixer.blend("auth.User", is_active=False)
-    group, _ = Group.objects.get_or_create(name=conf.GROUP_NAME)
-    approver.groups.add(group)
-    _pending_request()
-    request = _request_to("/admin/", approver)
-
-    middleware(request)
-
-    assert not list(request._messages)
+        assert not list(request._messages)
