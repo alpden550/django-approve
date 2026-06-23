@@ -3,9 +3,10 @@ from typing import Any
 from django.apps import AppConfig
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Q
+from django.db.models import Model, Q
 
 from django_approve.config import conf
+from django_approve.cons import ApprovalStatusChoices
 from django_approve.fields import prune_tracked_fields
 from django_approve.models import ApprovalConfig, ChangeRequestField
 from django_approve.registry import registry
@@ -71,3 +72,26 @@ def ensure_approval_group(sender: AppConfig, **kwargs: Any) -> None:
 
     group, _ = Group.objects.get_or_create(name=conf.GROUP_NAME)
     group.permissions.set(permissions)
+
+
+def cleanup_orphan_requests(sender: type[Model], instance: Model, **kwargs: Any) -> None:
+    """Mark pending requests of a deleted target as `deleted`.
+
+    The target no longer exists, so the request can never be applied. Moving it
+    out of `pending` releases the per-field lock while keeping the row as audit;
+    already terminal (`approved`/`rejected`) requests are left untouched.
+
+    Args:
+        sender: The model class of the deleted instance.
+        instance: The deleted instance (its pk is still available here).
+        **kwargs: Additional keyword arguments provided by the signal.
+    """
+    if not registry.is_registered(sender):
+        return
+
+    content_type = ContentType.objects.get_for_model(sender)
+    ChangeRequestField.objects.filter(
+        content_type=content_type,
+        object_id=instance.pk,
+        status=ApprovalStatusChoices.PENDING,
+    ).update(status=ApprovalStatusChoices.DELETED)

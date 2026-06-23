@@ -11,3 +11,5 @@ class ApprovalStatusChoices(models.TextChoices):
     PENDING = "pending", "pending"
     APPROVED = "approved", "approved"
     REJECTED = "rejected", "rejected"
+    CANCELLED = "cancelled", "cancelled"
+    DELETED = "deleted", "deleted"
