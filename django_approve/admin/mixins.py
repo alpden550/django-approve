@@ -16,17 +16,10 @@ if TYPE_CHECKING:
 
 
 class ApprovalAdminMixin(_Base):
-    """
-    Mixin for approval-based modification of model instances in a Django admin interface.
+    """Diverts admin edits to tracked fields into pending `ChangeRequestField` rows.
 
-    This class integrates approval workflows into the Django admin panel by managing
-    tracked fields, pending change requests, and ensuring readonly states for locked fields.
-    It allows administrators to submit field changes for approval before modifying the
-    underlying model instance.
-
-    Attributes:
-        change_form_template (str): Path to the template used for rendering the change
-            form in the admin interface.
+    Only intercepts saves made through this admin; calling `.save()` directly
+    from code bypasses the approval flow entirely.
     """
 
     change_form_template = "django_approve/target_change_form.html"

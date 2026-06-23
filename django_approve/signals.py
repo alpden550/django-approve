@@ -13,13 +13,10 @@ from django_approve.registry import registry
 
 
 def sync_approval_configs(sender: AppConfig, **kwargs: Any) -> None:
-    """
-    Synchronizes approval configurations for all models registered in the application. For each model,
-    retrieves its content type and ensures an `ApprovalConfig` entry exists with tracked fields updated.
+    """Create/update `ApprovalConfig` rows for registered models; prune stale tracked fields.
 
-    Args:
-        sender (AppConfig): The application configuration instance sending the signal.
-        **kwargs (Any): Additional keyword arguments provided by the signal.
+    Orphaned configs (model no longer registered) are deleted only while
+    `is_enabled=True`, so a manually disabled config survives unregistration.
     """
     active_content_type_ids = set()
 
@@ -42,20 +39,9 @@ def sync_approval_configs(sender: AppConfig, **kwargs: Any) -> None:
 
 
 def ensure_approval_group(sender: AppConfig, **kwargs: Any) -> None:
-    """
-    Ensures that an approval group with the necessary permissions is created.
+    """Idempotently sync the `conf.GROUP_NAME` group's view/change permissions.
 
-    This function checks whether the configuration allows the automatic creation
-    of the approval group. If enabled, it creates a group with the required
-    permissions for managing ChangeRequestField and ApprovalConfig models.
-
-    Args:
-        sender (AppConfig): The application configuration instance that triggered
-            the execution of this function.
-        **kwargs (Any): Arbitrary keyword arguments passed during the function call.
-
-    Returns:
-        None
+    No-op when `APPROVE_AUTO_CREATE_GROUP` is disabled.
     """
     if not conf.AUTO_CREATE_GROUP:
         return

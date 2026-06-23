@@ -74,21 +74,14 @@ def prune_tracked_fields(model: type[models.Model], tracked_fields: Iterable[str
 
 
 def get_tracked_fields(model: type[models.Model]) -> list[str]:
-    """
-    Fetches the list of tracked fields for a given model.
-
-    This function retrieves the tracked fields for a specified model by looking up
-    the associated content type and filtering the approval configuration that is
-    enabled for this content type. If no configuration is found, it returns an
-    empty list. The returned tracked fields are pruned before being returned.
+    """Return the approver-selected tracked fields for a model.
 
     Args:
-        model (type[models.Model]): The model class for which the tracked
-            fields are to be retrieved.
+        model: The model to look up.
 
     Returns:
-        list[str]: A list of tracked field names for the specified model. An
-            empty list is returned if no tracked fields are configured.
+        Pruned `tracked_fields` from the model's enabled `ApprovalConfig`, or
+        an empty list if none exists.
     """
 
     from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
