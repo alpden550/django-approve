@@ -4,7 +4,7 @@ from django_approve.fields import get_approvable_fields, get_candidate_fields
 from django_approve.registry import ApprovalRegistry
 from tests.models import Sample
 
-EXPECTED_CANDIDATES = ["name", "amount", "owner"]
+EXPECTED_CANDIDATES = ["name", "amount", "owner", "event_date", "price"]
 
 
 def test_candidate_fields_are_concrete_editable_supported():
