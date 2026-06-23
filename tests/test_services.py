@@ -5,7 +5,7 @@ from django.test import override_settings
 from mixer.backend.django import mixer
 
 from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
-from django_approve.exceptions import SelfApprovalError
+from django_approve.exceptions import ConflictError, SelfApprovalError
 from django_approve.models import ChangeRequestField
 from django_approve.services import apply_field
 from tests.models import Sample
@@ -65,3 +65,26 @@ def test_apply_field_allows_self_approval_when_disabled(sample):
 
     sample.refresh_from_db()
     assert sample.amount == NEW_AMOUNT
+
+
+def test_apply_field_raises_conflict_when_fk_target_deleted(sample):
+    maker = mixer.blend(User)
+    checker = mixer.blend(User)
+    new_owner = mixer.blend(User)
+    new_owner_pk = new_owner.pk
+    change_request = mixer.blend(
+        ChangeRequestField,
+        content_type=ContentType.objects.get_for_model(Sample),
+        object_id=sample.pk,
+        field_name="owner",
+        change_type=ChangeTypeChoices.UPDATE,
+        old_value=sample.owner_id,
+        new_value=new_owner_pk,
+        status=ApprovalStatusChoices.PENDING,
+        requested_by=maker,
+        approved_by=None,
+    )
+    new_owner.delete()
+
+    with pytest.raises(ConflictError):
+        apply_field(change_request=change_request, reviewer=checker)

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractBaseUser
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from django_approve.config import conf
@@ -25,6 +26,10 @@ def apply_field(change_request: ChangeRequestField, reviewer: AbstractBaseUser) 
         msg = f"Field '{field.name}' changed since the request was made."
         raise ConflictError(msg)
 
-    value = deserialize_value(target_cls, change_request.field_name, change_request.new_value)
+    try:
+        value = deserialize_value(target_cls, change_request.field_name, change_request.new_value)
+    except ObjectDoesNotExist as exc:
+        msg = f"Field '{field.name}' references a target that no longer exists."
+        raise ConflictError(msg) from exc
     setattr(obj, attr, value)
     obj.save(update_fields=[attr])
