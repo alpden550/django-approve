@@ -18,4 +18,6 @@ INSTALLED_APPS = [
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+ROOT_URLCONF = "tests.urls"
+
 USE_TZ = True
