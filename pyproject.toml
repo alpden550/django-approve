@@ -1,7 +1,7 @@
 [project]
 name = "django-approve"
 version = "0.1.0"
-description = "Moderated (four-eyes maker-checker) approval workflow for editing model fields through the Django admin"
+description = "Moderate edits in the Django admin: changes to tracked model fields wait for a second person's approval (four-eyes / maker-checker)"
 authors = [
     {name = "Denis Novikov",email = "alpden550@gmail.com"}
 ]
