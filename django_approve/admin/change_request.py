@@ -4,6 +4,7 @@ from django.contrib import admin, messages
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.utils import timezone
 
 from django_approve.admin.filters import TargetModelFilter
 from django_approve.config import conf
@@ -41,6 +42,9 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     actions = ("approve", "reject")
     list_select_related = ("content_type", "requested_by", "approved_by")
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet[ChangeRequestField]:
+        return super().get_queryset(request).prefetch_related("target")
+
     def has_add_permission(self, request) -> bool:
         return False
 
@@ -51,13 +55,15 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     def _allowed_statuses(obj: ChangeRequestField, user: AbstractBaseUser) -> list[tuple[str, str]]:
         """Status choices selectable in the form for the given user.
 
-        `deleted` is system-only (set on target deletion) and never offered.
-        `rejected` is the reviewer's verb and is always hidden from the request's
-        author, whose withdrawal verb is `cancelled`; `approved` is hidden from the
-        author only while four-eyes is on. `cancelled` is the author's only and is
-        hidden from reviewers. The request's current status is always kept so
-        terminal rows render.
+        A terminal request is locked to its current status. For a `pending`
+        request: `rejected` is the reviewer's verb (hidden from the author,
+        whose withdrawal verb is `cancelled`); `approved` is also hidden from
+        the author while four-eyes is on; `cancelled` is hidden from reviewers.
+        `deleted` is system-only and never offered.
         """
+        if obj.status != ApprovalStatusChoices.PENDING:
+            return [(obj.status, ApprovalStatusChoices(obj.status).label)]
+
         excluded = {ApprovalStatusChoices.DELETED.value}
         is_author = obj.requested_by_id == user.pk  # pyrefly: ignore [missing-attribute]
         if is_author:
@@ -66,7 +72,6 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
                 excluded.add(ApprovalStatusChoices.APPROVED.value)
         else:
             excluded.add(ApprovalStatusChoices.CANCELLED.value)
-        excluded.discard(obj.status)
 
         return [choice for choice in ApprovalStatusChoices.choices if choice[0] not in excluded]
 
@@ -130,5 +135,6 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         updated = queryset.filter(status=ApprovalStatusChoices.PENDING).update(
             status=ApprovalStatusChoices.REJECTED,
             approved_by=request.user,
+            updated=timezone.now(),
         )
         self.message_user(request, f"Rejected: {updated}")

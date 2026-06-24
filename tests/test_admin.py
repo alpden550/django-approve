@@ -100,6 +100,16 @@ class TestChangeRequestFieldAdminStatusChoices:
         choices = _status_choices(change_admin, _request_as(maker), change_request)
         assert choices == {S.PENDING, S.APPROVED, S.CANCELLED}
 
+    def test_terminal_status_is_not_reopenable_by_reviewer(self, change_admin, maker):
+        change_request = _request_by(maker)
+        change_request.status = S.REJECTED
+        change_request.save(update_fields=["status"])
+        checker = mixer.blend("auth.User")
+
+        choices = _status_choices(change_admin, _request_as(checker), change_request)
+
+        assert choices == {S.REJECTED}
+
 
 @pytest.mark.django_db
 class TestApprovalAdminMixinSaveModel:
@@ -168,3 +178,20 @@ class TestApprovalAdminMixinSaveModel:
         readonly = sample_admin.get_readonly_fields(_request_as(maker), sample)
 
         assert "amount" in readonly
+
+
+@pytest.mark.django_db
+class TestChangeRequestFieldAdminQueryEfficiency:
+    @pytest.fixture
+    def change_admin(self):
+        return ChangeRequestFieldAdmin(ChangeRequestField, AdminSite())
+
+    def test_changelist_queryset_does_not_n_plus_one_on_target(self, change_admin, django_assert_max_num_queries):
+        maker = mixer.blend("auth.User")
+        for _ in range(5):
+            _request_by(maker)
+
+        request = _request_as(maker)
+        with django_assert_max_num_queries(4):
+            for change_request in change_admin.get_queryset(request):
+                _ = change_request.target
