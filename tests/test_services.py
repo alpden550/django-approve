@@ -86,3 +86,45 @@ class TestApplyField:
 
         with pytest.raises(ConflictError):
             apply_field(change_request=change_request, reviewer=checker)
+
+    def test_apply_field_raises_conflict_when_object_deleted(self, sample):
+        maker = mixer.blend(User)
+        checker = mixer.blend(User)
+        change_request = _make_request(sample, requested_by=maker)
+        sample.delete()
+
+        with pytest.raises(ConflictError):
+            apply_field(change_request=change_request, reviewer=checker)
+
+    def test_apply_field_rejects_non_pending_request(self, sample):
+        maker = mixer.blend(User)
+        checker = mixer.blend(User)
+        change_request = _make_request(sample, requested_by=maker)
+        change_request.status = ApprovalStatusChoices.REJECTED
+        change_request.save(update_fields=["status"])
+
+        with pytest.raises(ConflictError):
+            apply_field(change_request=change_request, reviewer=checker)
+
+        sample.refresh_from_db()
+        assert sample.amount == OLD_AMOUNT
+
+    def test_apply_field_does_not_fetch_old_fk_target(self, sample, django_assert_max_num_queries):
+        maker = mixer.blend(User)
+        checker = mixer.blend(User)
+        new_owner = mixer.blend(User)
+        change_request = mixer.blend(
+            ChangeRequestField,
+            content_type=ContentType.objects.get_for_model(Sample),
+            object_id=sample.pk,
+            field_name="owner",
+            change_type=ChangeTypeChoices.UPDATE,
+            old_value=sample.owner_id,
+            new_value=new_owner.pk,
+            status=ApprovalStatusChoices.PENDING,
+            requested_by=maker,
+            approved_by=None,
+        )
+
+        with django_assert_max_num_queries(5):
+            apply_field(change_request=change_request, reviewer=checker)
