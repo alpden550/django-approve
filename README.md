@@ -5,7 +5,8 @@
 > maker-checker).
 
 [![CI](https://github.com/alpden550/django-approve/actions/workflows/ci.yml/badge.svg)](https://github.com/alpden550/django-approve/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
+[![PyPI version](https://img.shields.io/pypi/v/django-approvals.svg)](https://pypi.org/project/django-approvals/)
+[![Python versions](https://img.shields.io/pypi/pyversions/django-approvals.svg)](https://pypi.org/project/django-approvals/)
 [![Django](https://img.shields.io/badge/django-5%2B-092e20.svg)](https://www.djangoproject.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
