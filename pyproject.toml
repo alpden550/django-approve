@@ -1,5 +1,5 @@
 [project]
-name = "django-approve"
+name = "django-approvals"
 version = "0.1.0"
 description = "Moderate edits in the Django admin: changes to tracked model fields wait for a second person's approval (four-eyes / maker-checker)"
 authors = [
@@ -30,6 +30,9 @@ dependencies = [
 Homepage = "https://github.com/alpden550/django-approve"
 Repository = "https://github.com/alpden550/django-approve"
 Issues = "https://github.com/alpden550/django-approve/issues"
+
+[tool.poetry]
+packages = [{ include = "django_approve" }]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

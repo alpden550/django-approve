@@ -25,7 +25,7 @@ UX artifact (one "Submitted for approval: a, b, c" message).
 ## Installation
 
 ```bash
-pip install django-approve
+pip install django-approvals
 ```
 
 ```python
