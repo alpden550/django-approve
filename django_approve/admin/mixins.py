@@ -40,8 +40,9 @@ class ApprovalAdminMixin(_Base):
         return set(self._pending_qs(obj).values_list("field_name", flat=True))
 
     def get_readonly_fields(self, request, obj=None):
-        readonly = set(super().get_readonly_fields(request, obj))
-        return tuple(readonly | self._locked_fields(obj))
+        readonly = list(super().get_readonly_fields(request, obj))
+        readonly += [name for name in sorted(self._locked_fields(obj)) if name not in readonly]
+        return tuple(readonly)
 
     def save_model(self, request, obj, form, change) -> None:
         if not change:
