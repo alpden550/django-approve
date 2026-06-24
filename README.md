@@ -1,4 +1,4 @@
-# django-approve
+# django-approvals
 
 > Moderate edits in the Django admin — a change to a tracked model field isn't
 > saved directly, it waits for a second person's approval (four-eyes /
