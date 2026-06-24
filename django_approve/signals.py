@@ -66,11 +66,6 @@ def cleanup_orphan_requests(sender: type[Model], instance: Model, **kwargs: Any)
     The target no longer exists, so the request can never be applied. Moving it
     out of `pending` releases the per-field lock while keeping the row as audit;
     already terminal (`approved`/`rejected`) requests are left untouched.
-
-    Args:
-        sender: The model class of the deleted instance.
-        instance: The deleted instance (its pk is still available here).
-        **kwargs: Additional keyword arguments provided by the signal.
     """
     if not registry.is_registered(sender):
         return
