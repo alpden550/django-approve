@@ -23,6 +23,8 @@ UX artifact (one "Submitted for approval: a, b, c" message).
    request instead of writing the value.
 4. A **reviewer** approves or rejects each request — per field, independently.
 
+See [Screenshots](#screenshots) for what this looks like in the admin.
+
 ## Installation
 
 ```bash
@@ -116,8 +118,6 @@ directly:
   — **Approve** or **Reject**, per field, independently. Both are also
   available as bulk actions: select multiple pending rows and run **Approve
   selected** / **Reject selected** in one go.
-
-See [Screenshots](#screenshots) for what this looks like in the admin.
 
 > [!WARNING]
 > **Locking only happens in the admin.** The whole flow — diverting edits,
