@@ -2,7 +2,11 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from django_approve.fields import get_approvable_fields, get_candidate_fields, prune_tracked_fields
+from django_approve.fields import (
+    get_approvable_fields,
+    get_candidate_fields,
+    prune_tracked_fields,
+)
 from django_approve.registry import ApprovalRegistry
 from tests.models import Sample
 
