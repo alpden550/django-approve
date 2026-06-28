@@ -20,5 +20,9 @@ class AppSettings:
     def REQUIRE_DIFFERENT_USER(self) -> bool:  # noqa: N802
         return _get("REQUIRE_DIFFERENT_USER", default=True)
 
+    @property
+    def REQUIRE_CREATE_APPROVAL(self) -> bool:  # noqa: N802
+        return _get("REQUIRE_CREATE_APPROVAL", default=False)
+
 
 conf = AppSettings()
