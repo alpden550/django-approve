@@ -161,6 +161,35 @@ class TestApprovalAdminMixinSaveModel:
         sample.refresh_from_db()
         assert sample.name == "new"
 
+    def test_save_model_does_not_duplicate_when_field_already_pending(self, sample_admin, tracked_amount, maker):
+        sample = mixer.blend(Sample, amount=OLD_AMOUNT)
+        winner = mixer.blend("auth.User")
+        mixer.blend(
+            ChangeRequestField,
+            content_type=ContentType.objects.get_for_model(Sample),
+            object_id=sample.pk,
+            field_name="amount",
+            change_type=ChangeTypeChoices.UPDATE,
+            old_value=OLD_AMOUNT,
+            new_value=NEW_AMOUNT,
+            status=S.PENDING,
+            requested_by=winner,
+        )
+        form = _FakeForm(changed_data=["amount"], cleaned_data={"amount": 99})
+        sample.amount = 99
+        request = _request_as(maker)
+
+        sample_admin.save_model(request, sample, form, change=True)
+
+        requests = ChangeRequestField.objects.filter(
+            content_type=ContentType.objects.get_for_model(Sample), object_id=sample.pk
+        )
+        assert requests.count() == 1
+        assert requests.get().requested_by == winner
+        assert sample.amount == OLD_AMOUNT
+        warnings = [m.message for m in request._messages]
+        assert any("amount" in message for message in warnings)
+
     def test_get_readonly_fields_locks_pending_field(self, sample_admin, maker):
         sample = mixer.blend(Sample, amount=OLD_AMOUNT)
         mixer.blend(

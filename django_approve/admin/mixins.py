@@ -1,6 +1,8 @@
 from typing import TYPE_CHECKING
 
+from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, transaction
 from django.db.models import Model
 
 from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
@@ -55,25 +57,52 @@ class ApprovalAdminMixin(_Base):
             super().save_model(request, obj, form, change)
             return
 
-        content_type = ContentType.objects.get_for_model(obj.__class__)
+        self._divert_tracked_fields(request, obj, form, changed_tracked)
+        super().save_model(request, obj, form, change)
+
+    def _divert_tracked_fields(self, request, obj, form, changed_tracked: list[str]) -> None:
         original = obj.__class__.objects.get(pk=obj.pk)
 
+        submitted: list[str] = []
+        conflicted: list[str] = []
         for name in changed_tracked:
-            ChangeRequestField.objects.create(
-                content_type=content_type,
-                object_id=obj.pk,
-                field_name=name,
-                change_type=ChangeTypeChoices.UPDATE,
-                old_value=serialize_value(obj.__class__, name, getattr(original, name)),
-                new_value=serialize_value(obj.__class__, name, form.cleaned_data[name]),
-                status=ApprovalStatusChoices.PENDING,
-                requested_by=request.user,
-            )
-            # Revert tracked changes
+            created = self._create_pending(request, obj, form, original, name)
+            (submitted if created else conflicted).append(name)
+            # Keep the old value so Django's save doesn't write the new one to the row.
             setattr(obj, name, getattr(original, name))
 
-        super().save_model(request, obj, form, change)
-        self.message_user(request, f"Submitted for approval: {', '.join(changed_tracked)}")
+        if submitted:
+            self.message_user(request, f"Submitted for approval: {', '.join(submitted)}")
+        if conflicted:
+            self.message_user(
+                request,
+                f"Already awaiting approval, not resubmitted: {', '.join(conflicted)}",
+                level=messages.WARNING,
+            )
+
+    @staticmethod
+    def _create_pending(request, obj, form, original, name: str) -> bool:
+        """Create a pending request for one field; return False if one already exists.
+
+        A pending request for this field may already exist (concurrent edit); the partial
+        unique constraint rejects the duplicate. The insert runs in its own savepoint, so a
+        conflict on one field doesn't poison the others or the admin transaction.
+        """
+        try:
+            with transaction.atomic():
+                ChangeRequestField.objects.create(
+                    content_type=ContentType.objects.get_for_model(obj.__class__),
+                    object_id=obj.pk,
+                    field_name=name,
+                    change_type=ChangeTypeChoices.UPDATE,
+                    old_value=serialize_value(obj.__class__, name, getattr(original, name)),
+                    new_value=serialize_value(obj.__class__, name, form.cleaned_data[name]),
+                    status=ApprovalStatusChoices.PENDING,
+                    requested_by=request.user,
+                )
+        except IntegrityError:
+            return False
+        return True
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
