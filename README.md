@@ -42,6 +42,12 @@ Run `migrate`. This creates the `ApprovalConfig` / `ChangeRequestField` tables,
 syncs an `ApprovalConfig` row per registered model, and creates the `Approvals`
 group with `view` / `change` permissions on both models.
 
+### Assigning reviewers
+
+The package creates the `Approvals` group but **never adds users to it** —
+membership is what makes someone a reviewer, and that is up to you. Add each
+reviewer to the group in the admin: *Users → pick user → Groups → `Approvals`*.
+
 Optionally, add the middleware to show reviewers an *"N change request(s)
 awaiting review"* banner on the admin index:
 
