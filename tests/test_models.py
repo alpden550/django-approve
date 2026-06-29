@@ -67,6 +67,18 @@ class TestChangeRequestClean:
         )
         cr.clean()  # shape-only validation; clean_fields/db are covered separately
 
+    def test_applied_create_row_with_object_id_passes_clean(self):
+        cr = ChangeRequestField(
+            content_type=_ct(),
+            object_id=42,
+            field_name="",
+            change_type=ChangeTypeChoices.CREATE,
+            payload={"amount": 1},
+            payload_hash="abc",
+            status=ApprovalStatusChoices.APPROVED,
+        )
+        cr.clean()
+
     def test_valid_update_row_passes_clean(self):
         cr = ChangeRequestField(
             content_type=_ct(),
@@ -76,7 +88,7 @@ class TestChangeRequestClean:
             old_value=1,
             new_value=2,
         )
-        cr.clean()  # shape-only validation; clean_fields/db are covered separately
+        cr.clean()
 
 
 @pytest.mark.django_db

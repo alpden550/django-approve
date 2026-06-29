@@ -1,3 +1,5 @@
+from http import HTTPStatus
+
 import pytest
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
@@ -246,7 +248,7 @@ class TestApprovalAdminMixinCreate:
         return mixer.blend(
             ApprovalConfig,
             content_type=ContentType.objects.get_for_model(Widget),
-            tracked_fields=[],
+            tracked_fields=["name", "quantity"],
             is_enabled=True,
         )
 
@@ -268,8 +270,7 @@ class TestApprovalAdminMixinCreate:
         assert obj.pk is None
         assert not Widget.objects.exists()
         cr = ChangeRequestField.objects.get(change_type=ChangeTypeChoices.CREATE)
-        assert cr.payload["name"] == "w"
-        assert cr.payload["quantity"] == 3
+        assert {"name": "w", "quantity": 3}.items() <= cr.payload.items()
         assert cr.payload_hash == compute_payload_hash(cr.payload)
         assert cr.requested_by == maker
         assert request._approval_diverted is True
@@ -291,6 +292,25 @@ class TestApprovalAdminMixinCreate:
         form = _FakeForm(changed_data=[], cleaned_data={})
 
         widget_admin.save_model(_request_as(maker), obj, form, change=False)
+
+        assert Widget.objects.count() == 1
+        assert not ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).exists()
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_add_writes_object_when_no_fields_tracked(self, widget_admin, monkeypatch, maker):
+        reg = ApprovalRegistry()
+        reg.register(Widget)
+        monkeypatch.setattr("django_approve.fields.registry", reg)
+        monkeypatch.setattr("django_approve.admin.mixins.registry", reg)
+        mixer.blend(
+            ApprovalConfig,
+            content_type=ContentType.objects.get_for_model(Widget),
+            tracked_fields=[],
+            is_enabled=True,
+        )
+        obj = self._unsaved_widget()
+
+        widget_admin.save_model(_request_as(maker), obj, _FakeForm([], {}), change=False)
 
         assert Widget.objects.count() == 1
         assert not ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).exists()
@@ -327,8 +347,59 @@ class TestApprovalAdminMixinCreate:
 
         response = widget_admin.response_add(request, obj)
 
-        assert response.status_code == 302
+        assert response.status_code == HTTPStatus.FOUND
         assert "widget" in response.url
+
+    def test_response_add_uses_admin_site_namespace(self, monkeypatch, maker):
+        captured = {}
+
+        def fake_reverse(name):
+            captured["name"] = name
+            return "/staff/tests/widget/"
+
+        monkeypatch.setattr("django_approve.admin.mixins.reverse", fake_reverse)
+        admin_obj = WidgetAdmin(Widget, AdminSite(name="staff"))
+        request = _request_as(maker)
+        request._approval_diverted = True
+
+        response = admin_obj.response_add(request, self._unsaved_widget())
+
+        assert captured["name"] == "staff:tests_widget_changelist"
+        assert response.status_code == HTTPStatus.FOUND
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_add_rejected_when_payload_cannot_be_reconstructed(self, monkeypatch, maker):
+        reg = ApprovalRegistry()
+        reg.register(Sample)
+        monkeypatch.setattr("django_approve.fields.registry", reg)
+        monkeypatch.setattr("django_approve.admin.mixins.registry", reg)
+        mixer.blend(
+            ApprovalConfig,
+            content_type=ContentType.objects.get_for_model(Sample),
+            tracked_fields=["name", "amount"],
+            is_enabled=True,
+        )
+        sample_admin = SampleAdmin(Sample, AdminSite())
+        obj = Sample(name="s", amount=1, owner=maker)  # required FileField `attachment` cannot be snapshotted
+        request = _request_as(maker)
+
+        sample_admin.save_model(request, obj, _FakeForm([], {}), change=False)
+
+        assert not ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).exists()
+        assert request._approval_error is True
+        errors = [str(message.message) for message in request._messages]
+        assert any("Cannot submit for approval" in error for error in errors)
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_response_add_redirects_to_form_on_approval_error(self, widget_admin, maker):
+        request = _request_as(maker)
+        request._approval_diverted = True
+        request._approval_error = True
+
+        response = widget_admin.response_add(request, self._unsaved_widget())
+
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == request.path
 
 
 def _pending_create(model, payload, requested_by):
@@ -385,8 +456,16 @@ class TestChangeRequestFieldAdminCreate:
         create_cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
         update_cr = _request_by(maker)
 
-        assert "Widget" in change_admin.summary(create_cr)
+        assert ContentType.objects.get_for_model(Widget).name in change_admin.summary(create_cr)
         assert "amount" in change_admin.summary(update_cr)
+
+    def test_summary_survives_stale_content_type(self, change_admin):
+        stale = ContentType.objects.create(app_label="ghost", model="ghost")
+        cr = _pending_create(Widget, {"name": "w"}, requested_by=mixer.blend("auth.User"))
+        ChangeRequestField.objects.filter(pk=cr.pk).update(content_type=stale)
+        cr.refresh_from_db()
+
+        assert "ghost" in change_admin.summary(cr)
 
     def test_payload_fields_are_readonly(self, change_admin):
         assert "payload" in change_admin.readonly_fields

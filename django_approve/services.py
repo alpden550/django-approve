@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.contrib.auth.models import AbstractBaseUser
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError, models, transaction
@@ -63,21 +65,30 @@ def apply_field(change_request: ChangeRequestField, reviewer: AbstractBaseUser) 
     obj.save(update_fields=[attr])
 
 
+def build_create_instance(model: type[models.Model], payload: dict[str, Any]) -> models.Model:
+    """Reconstruct and validate a model instance from a create payload.
+
+    Raises:
+        ObjectDoesNotExist: a referenced relation no longer exists.
+        ValidationError: the rebuilt instance fails `full_clean` (e.g. a
+            required field the snapshot could not capture).
+    """
+    obj = model(**deserialize_object(model, payload))
+    obj.full_clean()
+    return obj
+
+
 @transaction.atomic
 def apply_create(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
     _guard(change_request, reviewer)
 
     model = change_request.content_type.model_class()  # pyrefly: ignore [missing-attribute]
     try:
-        kwargs = deserialize_object(model, change_request.payload)  # pyrefly: ignore [bad-argument-type]
+        obj = build_create_instance(model, change_request.payload)  # pyrefly: ignore [bad-argument-type]
+        obj.save()
     except ObjectDoesNotExist as exc:
         msg = "Create request references a target that no longer exists."
         raise ConflictError(msg) from exc
-
-    obj = model(**kwargs)
-    try:
-        obj.full_clean()
-        obj.save()
     except (ValidationError, IntegrityError) as exc:
         msg = f"Object could not be created: {exc}"
         raise ConflictError(msg) from exc
