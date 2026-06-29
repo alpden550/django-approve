@@ -2,6 +2,7 @@ from collections import Counter
 
 from django.contrib import admin, messages
 from django.contrib.auth.models import AbstractBaseUser
+from django.db import transaction
 from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils import timezone
@@ -113,7 +114,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     @admin.display(description="Summary")
     def summary(self, obj: ChangeRequestField) -> str:
         if obj.change_type == ChangeTypeChoices.CREATE:
-            model = obj.content_type.model_class().__name__ if obj.content_type else "?"
+            model = obj.content_type.name if obj.content_type else "?"
             items = ", ".join(f"{name}={value}" for name, value in (obj.payload or {}).items())
             text = f"+ {model} ({items})"
             return text if len(text) <= self._SUMMARY_MAX_LEN else f"{text[: self._SUMMARY_MAX_LEN - 3]}…"
@@ -150,15 +151,15 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     @staticmethod
     def _apply_one(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> str:
         try:
-            apply_change(change_request=change_request, reviewer=reviewer)
+            with transaction.atomic():
+                apply_change(change_request=change_request, reviewer=reviewer)
+                change_request.status = ApprovalStatusChoices.APPROVED
+                change_request.approved_by = reviewer  # pyrefly: ignore [bad-assignment]
+                change_request.save(update_fields=["status", "approved_by", "updated"])
         except ConflictError:
             return "conflict"
         except SelfApprovalError:
             return "blocked"
-
-        change_request.status = ApprovalStatusChoices.APPROVED
-        change_request.approved_by = reviewer  # pyrefly: ignore [bad-assignment]
-        change_request.save(update_fields=["status", "approved_by", "updated"])
         return "applied"
 
     @admin.action(description="Approve selected change requests")

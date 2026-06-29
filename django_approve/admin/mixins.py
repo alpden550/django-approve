@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Model
 from django.http import HttpResponseRedirect
@@ -10,13 +11,14 @@ from django.urls import reverse
 from django_approve.config import conf
 from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
 from django_approve.fields import get_tracked_fields
-from django_approve.models import ApprovalConfig, ChangeRequestField
+from django_approve.models import ChangeRequestField
 from django_approve.registry import registry
 from django_approve.serializers import (
     compute_payload_hash,
     serialize_object,
     serialize_value,
 )
+from django_approve.services import build_create_instance
 
 _Base = object
 if TYPE_CHECKING:
@@ -119,12 +121,21 @@ class ApprovalAdminMixin(_Base):
     def _is_tracked(model: type[Model]) -> bool:
         if not registry.is_registered(model):
             return False
-        content_type = ContentType.objects.get_for_model(model)
-        return ApprovalConfig.objects.filter(content_type=content_type, is_enabled=True).exists()
+        return bool(get_tracked_fields(model))
 
     def _divert_create(self, request, obj) -> None:
         request._approval_diverted = True
         payload = serialize_object(obj.__class__, obj)
+        try:
+            build_create_instance(obj.__class__, payload)
+        except (ValidationError, ObjectDoesNotExist) as exc:
+            request._approval_error = True
+            self.message_user(
+                request,
+                f"Cannot submit for approval: {exc}",
+                level=messages.ERROR,
+            )
+            return
         try:
             with transaction.atomic():
                 ChangeRequestField.objects.create(
@@ -158,7 +169,9 @@ class ApprovalAdminMixin(_Base):
 
     def response_add(self, request, obj, post_url_continue=None):
         if getattr(request, "_approval_diverted", False):
-            url_name = f"admin:{obj._meta.app_label}_{obj._meta.model_name}_changelist"
+            if getattr(request, "_approval_error", False):
+                return HttpResponseRedirect(request.path)
+            url_name = f"{self.admin_site.name}:{obj._meta.app_label}_{obj._meta.model_name}_changelist"
             return HttpResponseRedirect(reverse(url_name))
         return super().response_add(request, obj, post_url_continue=post_url_continue)
 

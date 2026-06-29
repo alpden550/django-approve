@@ -94,9 +94,9 @@ class ChangeRequestField(models.Model):
     def _clean_create(self) -> None:
         if not isinstance(self.payload, dict):
             raise ValidationError({"payload": "Create requests require a payload dict."})
-        forbidden = (self.field_name, self.object_id, self.old_value, self.new_value)
+        forbidden = (self.field_name, self.old_value, self.new_value)
         if any(value not in (None, "") for value in forbidden):
-            msg = "Create requests must not set field_name/object_id/old_value/new_value."
+            msg = "Create requests must not set field_name/old_value/new_value."
             raise ValidationError(msg)
 
     def _clean_update(self) -> None:

@@ -60,8 +60,9 @@ def test_fk_deserialize_raises_when_target_deleted(db):
         deserialize_value(Sample, "owner", owner_pk)
 
 
+@pytest.mark.django_db
 class TestObjectSerializers:
-    def test_serialize_object_snapshots_candidate_fields(self, db):
+    def test_serialize_object_snapshots_candidate_fields(self):
         owner = mixer.blend(User)
         sample = mixer.blend(Sample, name="n", amount=7, owner=owner, event_date=None, price=None)
 
@@ -76,7 +77,7 @@ class TestObjectSerializers:
         assert "tags" not in payload  # M2M excluded
         assert "id" not in payload  # pk excluded
 
-    def test_deserialize_object_round_trip(self, db):
+    def test_deserialize_object_round_trip(self):
         owner = mixer.blend(User)
         sample = mixer.blend(Sample, name="n", amount=7, owner=owner, event_date=None, price=None)
 
@@ -89,7 +90,7 @@ class TestObjectSerializers:
         assert kwargs["amount"] == 7
         assert kwargs["owner"] == owner
 
-    def test_deserialize_object_raises_when_fk_missing(self, db):
+    def test_deserialize_object_raises_when_fk_missing(self):
         from django_approve.serializers import deserialize_object
 
         with pytest.raises(User.DoesNotExist):
