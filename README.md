@@ -34,9 +34,20 @@ pip install django-approve-flow
 ```python
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
+    "django.contrib.staticfiles",
     "django_approve",
 ]
 ```
+
+The admin ships a CSS asset, so `django.contrib.staticfiles` must be enabled
+and static files configured. At minimum:
+
+```python
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # required for `collectstatic`
+```
+
+Run `collectstatic` when deploying so the stylesheet is served.
 
 Run `migrate`. This creates the `ApprovalConfig` / `ChangeRequestField` tables,
 syncs an `ApprovalConfig` row per registered model, and creates the `Approvals`
