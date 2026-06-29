@@ -5,13 +5,14 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 
 from django_approve.admin.filters import TargetModelFilter
 from django_approve.config import conf
-from django_approve.cons import ApprovalStatusChoices
+from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
 from django_approve.exceptions import ConflictError, SelfApprovalError
 from django_approve.models.change_request import ChangeRequestField
-from django_approve.services import apply_field
+from django_approve.services import apply_change
 
 
 @admin.register(ChangeRequestField)
@@ -21,6 +22,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         "target",
         "change_type",
         "status",
+        "summary",
         "field_name",
         "old_value",
         "new_value",
@@ -36,6 +38,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         "change_type",
         "old_value",
         "new_value",
+        "payload_display",
         "requested_by",
         "approved_by",
     )
@@ -75,6 +78,31 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
 
         return [choice for choice in ApprovalStatusChoices.choices if choice[0] not in excluded]
 
+    _SUMMARY_MAX_LEN = 80
+
+    @admin.display(description="Summary")
+    def summary(self, obj: ChangeRequestField) -> str:
+        if obj.change_type == ChangeTypeChoices.CREATE:
+            model = obj.content_type.model_class().__name__ if obj.content_type else "?"
+            items = ", ".join(f"{name}={value}" for name, value in (obj.payload or {}).items())
+            text = f"+ {model} ({items})"
+            return text if len(text) <= self._SUMMARY_MAX_LEN else f"{text[: self._SUMMARY_MAX_LEN - 3]}…"
+        return f"{obj.field_name}: {obj.old_value} → {obj.new_value}"
+
+    @admin.display(description="Payload")
+    def payload_display(self, obj: ChangeRequestField) -> str:
+        if not obj.payload:
+            return ""
+        rows = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td></tr>",
+            ((name, value) for name, value in obj.payload.items()),
+        )
+        return format_html(
+            "<table><thead><tr><th>Field</th><th>Requested value</th></tr></thead><tbody>{}</tbody></table>",
+            rows,
+        )
+
     def get_form(self, request, obj=None, change=False, **kwargs):  # noqa: FBT002
         form_class = super().get_form(request, obj, change=change, **kwargs)
         if obj is None:
@@ -97,7 +125,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         obj.approved_by = request.user
         if obj.status == ApprovalStatusChoices.APPROVED:
             try:
-                apply_field(change_request=obj, reviewer=request.user)  # pyrefly: ignore [bad-argument-type]
+                apply_change(change_request=obj, reviewer=request.user)  # pyrefly: ignore [bad-argument-type]
             except (ConflictError, SelfApprovalError) as exc:
                 self.message_user(request, str(exc), level=messages.ERROR)
                 return
@@ -106,7 +134,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     @staticmethod
     def _apply_one(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> str:
         try:
-            apply_field(change_request=change_request, reviewer=reviewer)
+            apply_change(change_request=change_request, reviewer=reviewer)
         except ConflictError:
             return "conflict"
         except SelfApprovalError:

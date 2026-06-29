@@ -329,3 +329,61 @@ class TestApprovalAdminMixinCreate:
 
         assert response.status_code == 302
         assert "widget" in response.url
+
+
+def _pending_create(model, payload, requested_by):
+    return mixer.blend(
+        ChangeRequestField,
+        content_type=ContentType.objects.get_for_model(model),
+        object_id=None,
+        field_name="",
+        change_type=ChangeTypeChoices.CREATE,
+        old_value=None,
+        new_value=None,
+        payload=payload,
+        payload_hash=compute_payload_hash(payload),
+        status=S.PENDING,
+        requested_by=requested_by,
+    )
+
+
+@pytest.mark.django_db
+class TestChangeRequestFieldAdminCreate:
+    @pytest.fixture
+    def change_admin(self):
+        return ChangeRequestFieldAdmin(ChangeRequestField, AdminSite())
+
+    def test_approving_create_writes_object(self, change_admin):
+        maker = mixer.blend("auth.User")
+        checker = mixer.blend("auth.User")
+        cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
+        cr.status = S.APPROVED
+        form = _FakeForm(changed_data=["status"], cleaned_data={})
+
+        change_admin.save_model(_request_as(checker), cr, form, change=True)
+
+        cr.refresh_from_db()
+        assert cr.status == S.APPROVED
+        assert Widget.objects.filter(name="w", quantity=3).exists()
+        assert cr.object_id is not None
+
+    def test_self_approval_of_create_is_blocked(self, change_admin):
+        maker = mixer.blend("auth.User")
+        cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
+        cr.status = S.APPROVED
+        form = _FakeForm(changed_data=["status"], cleaned_data={})
+        request = _request_as(maker)
+
+        change_admin.save_model(request, cr, form, change=True)
+
+        assert not Widget.objects.exists()
+        cr.refresh_from_db()
+        assert cr.status == S.PENDING
+
+    def test_summary_renders_create_and_update(self, change_admin):
+        maker = mixer.blend("auth.User")
+        create_cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
+        update_cr = _request_by(maker)
+
+        assert "Widget" in change_admin.summary(create_cr)
+        assert "amount" in change_admin.summary(update_cr)
