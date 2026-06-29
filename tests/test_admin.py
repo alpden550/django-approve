@@ -395,36 +395,27 @@ class TestChangeRequestFieldAdminCreate:
     def test_admin_loads_payload_stylesheet(self, change_admin):
         assert "django_approve/change_request.css" in change_admin.Media.css["all"]
 
-    def test_payload_display_renders_table(self, change_admin):
+    def test_payload_context_for_create(self, change_admin):
         maker = mixer.blend("auth.User")
         cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
 
-        html = change_admin.payload_display(cr)
+        ctx = change_admin._payload_context(cr)
 
-        assert "dja-payload--create" in html
-        assert "Requested value" in html
-        assert "quantity" in html
+        assert ("name", "w") in ctx["payload_items"]
+        assert ctx["payload_model"] == ContentType.objects.get_for_model(Widget).name
 
-    def test_payload_display_empty_for_update(self, change_admin):
+    def test_payload_context_empty_for_update(self, change_admin):
         maker = mixer.blend("auth.User")
         update_cr = _request_by(maker)
 
-        assert change_admin.payload_display(update_cr) == "—"
+        assert change_admin._payload_context(update_cr) == {}
 
-    def test_create_fieldsets_show_payload_table_first(self, change_admin):
-        maker = mixer.blend("auth.User")
-        cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
-
-        fieldsets = change_admin.get_fieldsets(_request_as(maker), cr)
-
-        assert "payload_display" in fieldsets[0][1]["fields"]
-
-    def test_update_fieldsets_omit_payload_table(self, change_admin):
+    def test_update_fieldsets_use_field_columns(self, change_admin):
         maker = mixer.blend("auth.User")
         update_cr = _request_by(maker)
 
         fieldsets = change_admin.get_fieldsets(_request_as(maker), update_cr)
         all_fields = [name for _, opts in fieldsets for name in opts["fields"]]
 
-        assert "payload_display" not in all_fields
         assert "old_value" in all_fields
+        assert "payload" not in all_fields

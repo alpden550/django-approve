@@ -13,6 +13,18 @@ def _ct():
 
 
 @pytest.mark.django_db
+class TestChangeRequestStr:
+    def test_create_str_names_the_model(self):
+        cr = ChangeRequestField(
+            content_type=_ct(),
+            field_name="",
+            change_type=ChangeTypeChoices.CREATE,
+            payload={"amount": 1},
+        )
+        assert str(cr) == f"Create {_ct().name}"
+
+
+@pytest.mark.django_db
 class TestChangeRequestClean:
     def test_update_row_with_payload_is_invalid(self):
         cr = ChangeRequestField(

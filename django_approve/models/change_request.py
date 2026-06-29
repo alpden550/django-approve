@@ -79,6 +79,9 @@ class ChangeRequestField(models.Model):
         ]
 
     def __str__(self) -> str:
+        if self.change_type == ChangeTypeChoices.CREATE:
+            model = self.content_type.name if self.content_type else "object"
+            return f"Create {model}"
         return f"{self.target} {self.field_name}"
 
     def clean(self) -> None:

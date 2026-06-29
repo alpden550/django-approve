@@ -4,9 +4,7 @@ from django.contrib import admin, messages
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 from django.http import HttpRequest
-from django.template.loader import render_to_string
 from django.utils import timezone
-from django.utils.safestring import mark_safe
 
 from django_approve.admin.filters import TargetModelFilter
 from django_approve.config import conf
@@ -40,7 +38,6 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         "change_type",
         "old_value",
         "new_value",
-        "payload_display",
         "payload",
         "payload_hash",
         "requested_by",
@@ -48,6 +45,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     )
     actions = ("approve", "reject")
     list_select_related = ("content_type", "requested_by", "approved_by")
+    change_form_template = "django_approve/changerequest_change_form.html"
 
     class Media:
         css = {"all": ("django_approve/change_request.css",)}  # noqa: RUF012
@@ -60,7 +58,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         if obj is not None and obj.change_type == ChangeTypeChoices.CREATE:
             return (
-                (None, {"fields": ("payload_display", "status")}),
+                (None, {"fields": ("status",)}),
                 ("Request", {"fields": self._META_FIELDS}),
                 ("Raw payload", {"classes": ("collapse",), "fields": ("payload", "payload_hash")}),
             )
@@ -68,6 +66,17 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
             (None, {"fields": ("field_name", "old_value", "new_value", "status")}),
             ("Request", {"fields": self._META_FIELDS}),
         )
+
+    @staticmethod
+    def _payload_context(obj: ChangeRequestField | None) -> dict[str, object]:
+        if obj is None or obj.change_type != ChangeTypeChoices.CREATE or not obj.payload:
+            return {}
+        model = obj.content_type.name if obj.content_type else "object"
+        return {"payload_items": list(obj.payload.items()), "payload_model": model}
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = {**(extra_context or {}), **self._payload_context(self.get_object(request, object_id))}
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def has_add_permission(self, request) -> bool:
         return False
@@ -109,13 +118,6 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
             text = f"+ {model} ({items})"
             return text if len(text) <= self._SUMMARY_MAX_LEN else f"{text[: self._SUMMARY_MAX_LEN - 3]}…"
         return f"{obj.field_name}: {obj.old_value} → {obj.new_value}"
-
-    @admin.display(description="Requested object")
-    def payload_display(self, obj: ChangeRequestField) -> str:
-        if not obj.payload:
-            return "—"
-        html = render_to_string("django_approve/payload_table.html", {"items": obj.payload.items()})
-        return mark_safe(html)  # noqa: S308  # template auto-escapes the payload values
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # noqa: FBT002
         form_class = super().get_form(request, obj, change=change, **kwargs)
