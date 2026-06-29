@@ -1,6 +1,6 @@
 [project]
 name = "django-approve-flow"
-version = "0.1.1"
+version = "0.2.0"
 description = "Moderate edits in the Django admin: changes to tracked model fields wait for a second person's approval (four-eyes / maker-checker)"
 authors = [
     {name = "Denis Novikov",email = "alpden550@gmail.com"}
