@@ -34,12 +34,10 @@ def deserialize_value(model: type[Model], field_name: str, raw: Any) -> Any:
 
 
 def serialize_object(model: type[Model], instance: Model) -> dict[str, Any]:
-    """Snapshot all create-eligible fields of an instance into JSON primitives."""
     return {name: serialize_value(model, name, getattr(instance, name)) for name in get_candidate_fields(model)}
 
 
 def deserialize_object(model: type[Model], payload: dict[str, Any]) -> dict[str, Any]:
-    """Build kwargs for model(**kwargs); FK values resolve to instances (may raise ObjectDoesNotExist)."""
     return {name: deserialize_value(model, name, raw) for name, raw in payload.items()}
 
 
