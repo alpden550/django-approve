@@ -11,7 +11,8 @@ from django_approve.admin.mixins import ApprovalAdminMixin
 from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
 from django_approve.models import ApprovalConfig, ChangeRequestField
 from django_approve.registry import ApprovalRegistry
-from tests.models import Sample
+from django_approve.serializers import compute_payload_hash, serialize_object
+from tests.models import Sample, Widget
 
 S = ApprovalStatusChoices
 
@@ -224,3 +225,107 @@ class TestChangeRequestFieldAdminQueryEfficiency:
         with django_assert_max_num_queries(4):
             for change_request in change_admin.get_queryset(request):
                 _ = change_request.target
+
+
+class WidgetAdmin(ApprovalAdminMixin, admin.ModelAdmin):
+    pass
+
+
+@pytest.mark.django_db
+class TestApprovalAdminMixinCreate:
+    @pytest.fixture
+    def widget_admin(self):
+        return WidgetAdmin(Widget, AdminSite())
+
+    @pytest.fixture
+    def tracked_widget(self, monkeypatch):
+        reg = ApprovalRegistry()
+        reg.register(Widget)
+        monkeypatch.setattr("django_approve.fields.registry", reg)
+        monkeypatch.setattr("django_approve.admin.mixins.registry", reg)
+        return mixer.blend(
+            ApprovalConfig,
+            content_type=ContentType.objects.get_for_model(Widget),
+            tracked_fields=[],
+            is_enabled=True,
+        )
+
+    @pytest.fixture
+    def maker(self):
+        return mixer.blend("auth.User")
+
+    def _unsaved_widget(self):
+        return Widget(name="w", quantity=3, owner=None, price=None, code=None)
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_add_is_diverted_to_pending_create(self, widget_admin, tracked_widget, maker):
+        obj = self._unsaved_widget()
+        form = _FakeForm(changed_data=[], cleaned_data={})
+        request = _request_as(maker)
+
+        widget_admin.save_model(request, obj, form, change=False)
+
+        assert obj.pk is None
+        assert not Widget.objects.exists()
+        cr = ChangeRequestField.objects.get(change_type=ChangeTypeChoices.CREATE)
+        assert cr.payload["name"] == "w"
+        assert cr.payload["quantity"] == 3
+        assert cr.payload_hash == compute_payload_hash(cr.payload)
+        assert cr.requested_by == maker
+        assert request._approval_diverted is True
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=False)
+    def test_add_writes_object_when_flag_off(self, widget_admin, tracked_widget, maker):
+        obj = self._unsaved_widget()
+        form = _FakeForm(changed_data=[], cleaned_data={})
+
+        widget_admin.save_model(_request_as(maker), obj, form, change=False)
+
+        assert obj.pk is not None
+        assert Widget.objects.count() == 1
+        assert not ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).exists()
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_add_writes_object_when_model_untracked(self, widget_admin, maker):
+        obj = self._unsaved_widget()
+        form = _FakeForm(changed_data=[], cleaned_data={})
+
+        widget_admin.save_model(_request_as(maker), obj, form, change=False)
+
+        assert Widget.objects.count() == 1
+        assert not ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).exists()
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_duplicate_create_submit_warns_and_does_not_double(self, widget_admin, tracked_widget, maker):
+        payload = serialize_object(Widget, self._unsaved_widget())
+        mixer.blend(
+            ChangeRequestField,
+            content_type=ContentType.objects.get_for_model(Widget),
+            object_id=None,
+            field_name="",
+            change_type=ChangeTypeChoices.CREATE,
+            old_value=None,
+            new_value=None,
+            payload=payload,
+            payload_hash=compute_payload_hash(payload),
+            status=S.PENDING,
+            requested_by=mixer.blend("auth.User"),
+        )
+        request = _request_as(maker)
+
+        widget_admin.save_model(request, self._unsaved_widget(), form=_FakeForm([], {}), change=False)
+
+        assert ChangeRequestField.objects.filter(change_type=ChangeTypeChoices.CREATE).count() == 1
+        warnings = [m.message for m in request._messages]
+        assert any("approval" in str(message).lower() for message in warnings)
+
+    @override_settings(APPROVE_REQUIRE_CREATE_APPROVAL=True)
+    def test_response_add_redirects_to_changelist_when_diverted(self, widget_admin, tracked_widget, maker):
+        request = _request_as(maker)
+        request._approval_diverted = True
+        obj = self._unsaved_widget()
+
+        response = widget_admin.response_add(request, obj)
+
+        assert response.status_code == 302
+        assert "widget" in response.url
