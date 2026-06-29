@@ -1,0 +1,39 @@
+.dja-payload {
+  margin-bottom: 20px;
+  border-left: 4px solid #4c9a52;
+}
+
+.dja-payload table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dja-payload th,
+.dja-payload td {
+  text-align: left;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--hairline-color, #e8e8e8);
+  vertical-align: top;
+}
+
+.dja-payload thead th {
+  border-bottom: 2px solid var(--border-color, #ccc);
+  font-weight: 600;
+  color: var(--body-fg, #333);
+}
+
+.dja-payload tbody th {
+  width: 240px;
+  font-weight: 600;
+  color: var(--body-fg, #333);
+}
+
+.dja-payload tbody tr:nth-child(even) th,
+.dja-payload tbody tr:nth-child(even) td {
+  background: var(--darkened-bg, #f6f6f6);
+}
+
+.dja-payload code {
+  font-size: 13px;
+  word-break: break-word;
+}

@@ -4,11 +4,19 @@ from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
 from django.db.models import Model
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
+from django_approve.config import conf
 from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
 from django_approve.fields import get_tracked_fields
-from django_approve.models import ChangeRequestField
-from django_approve.serializers import serialize_value
+from django_approve.models import ApprovalConfig, ChangeRequestField
+from django_approve.registry import registry
+from django_approve.serializers import (
+    compute_payload_hash,
+    serialize_object,
+    serialize_value,
+)
 
 _Base = object
 if TYPE_CHECKING:
@@ -48,6 +56,9 @@ class ApprovalAdminMixin(_Base):
 
     def save_model(self, request, obj, form, change) -> None:
         if not change:
+            if conf.REQUIRE_CREATE_APPROVAL and self._is_tracked(obj.__class__):
+                self._divert_create(request, obj)
+                return
             super().save_model(request, obj, form, change)
             return
 
@@ -103,6 +114,53 @@ class ApprovalAdminMixin(_Base):
         except IntegrityError:
             return False
         return True
+
+    @staticmethod
+    def _is_tracked(model: type[Model]) -> bool:
+        if not registry.is_registered(model):
+            return False
+        content_type = ContentType.objects.get_for_model(model)
+        return ApprovalConfig.objects.filter(content_type=content_type, is_enabled=True).exists()
+
+    def _divert_create(self, request, obj) -> None:
+        request._approval_diverted = True
+        payload = serialize_object(obj.__class__, obj)
+        try:
+            with transaction.atomic():
+                ChangeRequestField.objects.create(
+                    content_type=ContentType.objects.get_for_model(obj.__class__),
+                    object_id=None,
+                    field_name="",
+                    change_type=ChangeTypeChoices.CREATE,
+                    payload=payload,
+                    payload_hash=compute_payload_hash(payload),
+                    status=ApprovalStatusChoices.PENDING,
+                    requested_by=request.user,
+                )
+        except IntegrityError:
+            self.message_user(
+                request,
+                "An identical creation is already awaiting approval.",
+                level=messages.WARNING,
+            )
+            return
+        self.message_user(request, f"Submitted for approval (create): {obj.__class__.__name__}")
+
+    def save_related(self, request, form, formsets, change) -> None:
+        if getattr(request, "_approval_diverted", False):
+            return
+        super().save_related(request, form, formsets, change)
+
+    def log_addition(self, request, obj, message):  # pyrefly: ignore [bad-override]
+        if getattr(request, "_approval_diverted", False):
+            return None
+        return super().log_addition(request, obj, message)
+
+    def response_add(self, request, obj, post_url_continue=None):
+        if getattr(request, "_approval_diverted", False):
+            url_name = f"admin:{obj._meta.app_label}_{obj._meta.model_name}_changelist"
+            return HttpResponseRedirect(reverse(url_name))
+        return super().response_add(request, obj, post_url_continue=post_url_continue)
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}

@@ -34,9 +34,20 @@ pip install django-approve-flow
 ```python
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
+    "django.contrib.staticfiles",
     "django_approve",
 ]
 ```
+
+The admin ships a CSS asset, so `django.contrib.staticfiles` must be enabled
+and static files configured. At minimum:
+
+```python
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # required for `collectstatic`
+```
+
+Run `collectstatic` when deploying so the stylesheet is served.
 
 Run `migrate`. This creates the `ApprovalConfig` / `ChangeRequestField` tables,
 syncs an `ApprovalConfig` row per registered model, and creates the `Approvals`
@@ -161,13 +172,31 @@ nothing is applied.
 All settings are optional; defaults are shown.
 
 ```python
-APPROVE_AUTO_CREATE_GROUP = True       # create/maintain the Approvals group via post_migrate
-APPROVE_GROUP_NAME = "Approvals"       # group name; membership = reviewer
-APPROVE_REQUIRE_DIFFERENT_USER = True  # four-eyes: block self-approval (SelfApprovalError)
+APPROVE_AUTO_CREATE_GROUP = True        # create/maintain the Approvals group via post_migrate
+APPROVE_GROUP_NAME = "Approvals"        # group name; membership = reviewer
+APPROVE_REQUIRE_DIFFERENT_USER = True   # four-eyes: block self-approval (SelfApprovalError)
+APPROVE_REQUIRE_CREATE_APPROVAL = False # gate object creation behind approval (see below)
 ```
 
 `APPROVE_AUTO_CREATE_GROUP` only controls whether the package manages the
 group's permissions on `migrate`; it never adds or removes users.
+
+When `APPROVE_REQUIRE_CREATE_APPROVAL` is on, submitting the admin *add* form
+for a tracked model does not write the object; it creates a single pending
+create request snapshotting all fields. The object is written only when a
+reviewer approves.
+
+### Create-approval limitations (v1)
+
+- Diversion happens only in the admin. Calling `.save()` /
+  `Model.objects.create()` from code bypasses create approval (same caveat as
+  field updates).
+- Create snapshots exclude `FileField` / `ImageField` / `ManyToManyField`. A
+  model with a **required** field of those types is not supported by create
+  approval in v1 — approving its request will fail validation.
+- Pending create requests are deduplicated by **identical** payload across all
+  users (the `(content_type, payload_hash)` partial-unique lock); two genuinely
+  different new objects are independent requests.
 
 ## Supported field types (v1)
 
@@ -208,6 +237,13 @@ any tracked field) the primary key, non-editable, and `auto_now` /
 
 ![Pending-requests banner on the admin index](docs/screenshots/approvers.png)
 ![Change request fields changelist](docs/screenshots/requests.png)
+
+</details>
+
+<details>
+<summary>Create approval: reviewing a pending new object</summary>
+
+![Pending create request showing the requested object snapshot](docs/screenshots/created.png)
 
 </details>
 

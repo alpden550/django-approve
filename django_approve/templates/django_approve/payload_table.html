@@ -1,0 +1,19 @@
+<div class="module dja-payload dja-payload--create">
+  <h2 class="dja-payload__title">New {{ model }} — will be created when approved</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Requested value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for name, value in items %}
+        <tr>
+          <th>{{ name }}</th>
+          <td><code>{{ value|default_if_none:"—" }}</code></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
