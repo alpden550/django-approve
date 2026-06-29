@@ -240,6 +240,13 @@ any tracked field) the primary key, non-editable, and `auto_now` /
 
 </details>
 
+<details>
+<summary>Create approval: reviewing a pending new object</summary>
+
+![Pending create request showing the requested object snapshot](docs/screenshots/created.png)
+
+</details>
+
 ## Development
 
 ```bash
