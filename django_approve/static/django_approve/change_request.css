@@ -1,0 +1,47 @@
+.dja-payload {
+  border: 1px solid var(--border-color, #ccc);
+  border-left-width: 3px;
+  border-radius: 4px;
+  padding: 10px 14px;
+  background: var(--body-bg, #fff);
+}
+
+.dja-payload--create {
+  border-left-color: #4c9a52;
+}
+
+.dja-payload__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body-quiet-color, #666);
+}
+
+.dja-payload table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dja-payload th,
+.dja-payload td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hairline-color, #e8e8e8);
+  vertical-align: top;
+}
+
+.dja-payload thead th {
+  border-bottom: 2px solid var(--border-color, #ccc);
+  color: var(--body-fg, #333);
+  font-weight: 600;
+}
+
+.dja-payload tbody th {
+  width: 30%;
+  font-weight: 600;
+  color: var(--body-fg, #333);
+}
+
+.dja-payload code {
+  word-break: break-word;
+}

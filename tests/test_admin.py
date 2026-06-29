@@ -392,6 +392,25 @@ class TestChangeRequestFieldAdminCreate:
         assert "payload" in change_admin.readonly_fields
         assert "payload_hash" in change_admin.readonly_fields
 
+    def test_admin_loads_payload_stylesheet(self, change_admin):
+        assert "django_approve/change_request.css" in change_admin.Media.css["all"]
+
+    def test_payload_display_renders_table(self, change_admin):
+        maker = mixer.blend("auth.User")
+        cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
+
+        html = change_admin.payload_display(cr)
+
+        assert "dja-payload--create" in html
+        assert "Requested value" in html
+        assert "quantity" in html
+
+    def test_payload_display_empty_for_update(self, change_admin):
+        maker = mixer.blend("auth.User")
+        update_cr = _request_by(maker)
+
+        assert change_admin.payload_display(update_cr) == "—"
+
     def test_create_fieldsets_show_payload_table_first(self, change_admin):
         maker = mixer.blend("auth.User")
         cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)

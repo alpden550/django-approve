@@ -4,8 +4,9 @@ from django.contrib import admin, messages
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.template.loader import render_to_string
 from django.utils import timezone
-from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 
 from django_approve.admin.filters import TargetModelFilter
 from django_approve.config import conf
@@ -47,6 +48,9 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     )
     actions = ("approve", "reject")
     list_select_related = ("content_type", "requested_by", "approved_by")
+
+    class Media:
+        css = {"all": ("django_approve/change_request.css",)}  # noqa: RUF012
 
     _META_FIELDS = ("content_type", "object_id", "target", "change_type", "requested_by", "approved_by", "created")
 
@@ -110,19 +114,8 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     def payload_display(self, obj: ChangeRequestField) -> str:
         if not obj.payload:
             return "—"
-        cell = "padding:6px 12px;border-bottom:1px solid var(--border-color)"
-        head = f"{cell};background:var(--darkened-bg);font-weight:600;text-align:left"
-        rows = format_html_join(
-            "",
-            f'<tr><th style="{head}">{{}}</th><td style="{cell}"><code>{{}}</code></td></tr>',
-            ((name, value) for name, value in obj.payload.items()),
-        )
-        return format_html(
-            '<table style="border-collapse:collapse;border:1px solid var(--border-color)">'
-            f'<thead><tr><th style="{head}">Field</th><th style="{head}">Requested value</th></tr></thead>'
-            "<tbody>{}</tbody></table>",
-            rows,
-        )
+        html = render_to_string("django_approve/payload_table.html", {"items": obj.payload.items()})
+        return mark_safe(html)  # noqa: S308  # template auto-escapes the payload values
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # noqa: FBT002
         form_class = super().get_form(request, obj, change=change, **kwargs)

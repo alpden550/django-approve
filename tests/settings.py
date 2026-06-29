@@ -18,6 +18,15 @@ INSTALLED_APPS = [
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "APP_DIRS": True,
+        "DIRS": [],
+        "OPTIONS": {},
+    },
+]
+
 ROOT_URLCONF = "tests.urls"
 
 USE_TZ = True
