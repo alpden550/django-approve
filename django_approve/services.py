@@ -22,7 +22,14 @@ def _lock_target(target_cls: type[models.Model], object_id: int | None, field_na
 
 
 def _guard(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
-    if change_request.status != ApprovalStatusChoices.PENDING:
+    persisted_status = (
+        type(change_request)
+        .objects.select_for_update()
+        .filter(pk=change_request.pk)
+        .values_list("status", flat=True)
+        .first()
+    )
+    if persisted_status != ApprovalStatusChoices.PENDING:
         msg = f"Change request {change_request.pk} is no longer pending."
         raise ConflictError(msg)
 

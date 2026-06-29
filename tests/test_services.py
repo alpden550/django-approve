@@ -127,7 +127,7 @@ class TestApplyField:
             approved_by=None,
         )
 
-        with django_assert_max_num_queries(5):
+        with django_assert_max_num_queries(6):
             apply_field(change_request=change_request, reviewer=checker)
 
 
