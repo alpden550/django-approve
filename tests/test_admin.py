@@ -387,3 +387,25 @@ class TestChangeRequestFieldAdminCreate:
 
         assert "Widget" in change_admin.summary(create_cr)
         assert "amount" in change_admin.summary(update_cr)
+
+    def test_payload_fields_are_readonly(self, change_admin):
+        assert "payload" in change_admin.readonly_fields
+        assert "payload_hash" in change_admin.readonly_fields
+
+    def test_create_fieldsets_show_payload_table_first(self, change_admin):
+        maker = mixer.blend("auth.User")
+        cr = _pending_create(Widget, {"name": "w", "quantity": 3}, requested_by=maker)
+
+        fieldsets = change_admin.get_fieldsets(_request_as(maker), cr)
+
+        assert "payload_display" in fieldsets[0][1]["fields"]
+
+    def test_update_fieldsets_omit_payload_table(self, change_admin):
+        maker = mixer.blend("auth.User")
+        update_cr = _request_by(maker)
+
+        fieldsets = change_admin.get_fieldsets(_request_as(maker), update_cr)
+        all_fields = [name for _, opts in fieldsets for name in opts["fields"]]
+
+        assert "payload_display" not in all_fields
+        assert "old_value" in all_fields

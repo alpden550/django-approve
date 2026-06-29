@@ -31,6 +31,7 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "change_type", TargetModelFilter)
     readonly_fields = (
+        "created",
         "content_type",
         "object_id",
         "target",
@@ -39,14 +40,30 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
         "old_value",
         "new_value",
         "payload_display",
+        "payload",
+        "payload_hash",
         "requested_by",
         "approved_by",
     )
     actions = ("approve", "reject")
     list_select_related = ("content_type", "requested_by", "approved_by")
 
+    _META_FIELDS = ("content_type", "object_id", "target", "change_type", "requested_by", "approved_by", "created")
+
     def get_queryset(self, request: HttpRequest) -> QuerySet[ChangeRequestField]:
         return super().get_queryset(request).prefetch_related("target")
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is not None and obj.change_type == ChangeTypeChoices.CREATE:
+            return (
+                (None, {"fields": ("payload_display", "status")}),
+                ("Request", {"fields": self._META_FIELDS}),
+                ("Raw payload", {"classes": ("collapse",), "fields": ("payload", "payload_hash")}),
+            )
+        return (
+            (None, {"fields": ("field_name", "old_value", "new_value", "status")}),
+            ("Request", {"fields": self._META_FIELDS}),
+        )
 
     def has_add_permission(self, request) -> bool:
         return False
@@ -89,17 +106,21 @@ class ChangeRequestFieldAdmin(admin.ModelAdmin):
             return text if len(text) <= self._SUMMARY_MAX_LEN else f"{text[: self._SUMMARY_MAX_LEN - 3]}…"
         return f"{obj.field_name}: {obj.old_value} → {obj.new_value}"
 
-    @admin.display(description="Payload")
+    @admin.display(description="Requested object")
     def payload_display(self, obj: ChangeRequestField) -> str:
         if not obj.payload:
-            return ""
+            return "—"
+        cell = "padding:6px 12px;border-bottom:1px solid var(--border-color)"
+        head = f"{cell};background:var(--darkened-bg);font-weight:600;text-align:left"
         rows = format_html_join(
             "",
-            "<tr><td>{}</td><td>{}</td></tr>",
+            f'<tr><th style="{head}">{{}}</th><td style="{cell}"><code>{{}}</code></td></tr>',
             ((name, value) for name, value in obj.payload.items()),
         )
         return format_html(
-            "<table><thead><tr><th>Field</th><th>Requested value</th></tr></thead><tbody>{}</tbody></table>",
+            '<table style="border-collapse:collapse;border:1px solid var(--border-color)">'
+            f'<thead><tr><th style="{head}">Field</th><th style="{head}">Requested value</th></tr></thead>'
+            "<tbody>{}</tbody></table>",
             rows,
         )
 
