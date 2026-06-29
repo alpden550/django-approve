@@ -1,12 +1,16 @@
 from django.contrib.auth.models import AbstractBaseUser
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import models, transaction
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.db import IntegrityError, models, transaction
 
 from django_approve.config import conf
-from django_approve.cons import ApprovalStatusChoices
+from django_approve.cons import ApprovalStatusChoices, ChangeTypeChoices
 from django_approve.exceptions import ConflictError, SelfApprovalError
 from django_approve.models import ChangeRequestField
-from django_approve.serializers import deserialize_value, serialize_value
+from django_approve.serializers import (
+    deserialize_object,
+    deserialize_value,
+    serialize_value,
+)
 
 
 def _lock_target(target_cls: type[models.Model], object_id: int | None, field_name: str) -> models.Model:
@@ -17,16 +21,20 @@ def _lock_target(target_cls: type[models.Model], object_id: int | None, field_na
         raise ConflictError(msg) from exc
 
 
-@transaction.atomic
-def apply_field(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
+def _guard(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
     if change_request.status != ApprovalStatusChoices.PENDING:
-        msg = f"Field '{change_request.field_name}' is no longer pending."
+        msg = f"Change request {change_request.pk} is no longer pending."
         raise ConflictError(msg)
 
-    # pyrefly: ignore [missing-attribute]
-    if conf.REQUIRE_DIFFERENT_USER and change_request.requested_by_id == reviewer.pk:
-        msg = f"Field '{change_request.field_name}' cannot be approved by its own requester."
+    requester_id = change_request.requested_by_id  # pyrefly: ignore [missing-attribute]
+    if conf.REQUIRE_DIFFERENT_USER and requester_id == reviewer.pk:
+        msg = f"Change request {change_request.pk} cannot be approved by its own requester."
         raise SelfApprovalError(msg)
+
+
+@transaction.atomic
+def apply_field(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
+    _guard(change_request, reviewer)
 
     target_cls = change_request.content_type.model_class()  # pyrefly: ignore [missing-attribute]
     obj = _lock_target(target_cls, change_request.object_id, change_request.field_name)
@@ -46,3 +54,33 @@ def apply_field(change_request: ChangeRequestField, reviewer: AbstractBaseUser) 
         raise ConflictError(msg) from exc
     setattr(obj, attr, value)
     obj.save(update_fields=[attr])
+
+
+@transaction.atomic
+def apply_create(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
+    _guard(change_request, reviewer)
+
+    model = change_request.content_type.model_class()  # pyrefly: ignore [missing-attribute]
+    try:
+        kwargs = deserialize_object(model, change_request.payload)  # pyrefly: ignore [bad-argument-type]
+    except ObjectDoesNotExist as exc:
+        msg = "Create request references a target that no longer exists."
+        raise ConflictError(msg) from exc
+
+    obj = model(**kwargs)
+    try:
+        obj.full_clean()
+        obj.save()
+    except (ValidationError, IntegrityError) as exc:
+        msg = f"Object could not be created: {exc}"
+        raise ConflictError(msg) from exc
+
+    change_request.object_id = obj.pk
+    change_request.save(update_fields=["object_id", "updated"])
+
+
+def apply_change(change_request: ChangeRequestField, reviewer: AbstractBaseUser) -> None:
+    if change_request.change_type == ChangeTypeChoices.CREATE:
+        apply_create(change_request, reviewer)
+    else:
+        apply_field(change_request, reviewer)

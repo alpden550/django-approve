@@ -12,3 +12,11 @@ class Sample(models.Model):
     tags = models.ManyToManyField("auth.Group")
     event_date = models.DateField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+
+class Widget(models.Model):
+    name = models.CharField(max_length=50)
+    quantity = models.IntegerField()
+    code = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    owner = models.ForeignKey("auth.User", on_delete=models.CASCADE, null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
