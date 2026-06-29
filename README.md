@@ -182,9 +182,10 @@ APPROVE_REQUIRE_CREATE_APPROVAL = False # gate object creation behind approval (
 group's permissions on `migrate`; it never adds or removes users.
 
 When `APPROVE_REQUIRE_CREATE_APPROVAL` is on, submitting the admin *add* form
-for a tracked model does not write the object; it creates a single pending
-create request snapshotting all fields. The object is written only when a
-reviewer approves.
+for a model that has at least one tracked field does not write the object; it
+creates a single pending create request snapshotting all fields. The object is
+written only when a reviewer approves. A model with no tracked fields is created
+normally — create approval follows the same `tracked_fields` gate as updates.
 
 ### Create-approval limitations (v1)
 
@@ -193,7 +194,8 @@ reviewer approves.
   field updates).
 - Create snapshots exclude `FileField` / `ImageField` / `ManyToManyField`. A
   model with a **required** field of those types is not supported by create
-  approval in v1 — approving its request will fail validation.
+  approval in v1 — the add form is rejected at submit time with a validation
+  error instead of filing an unapprovable request.
 - Pending create requests are deduplicated by **identical** payload across all
   users (the `(content_type, payload_hash)` partial-unique lock); two genuinely
   different new objects are independent requests.
